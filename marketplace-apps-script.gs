@@ -84,8 +84,13 @@ function handleMarketplaceRequest(data) {
     const lastRow = sheet.getLastRow();
     if (lastRow > 1) {
       const existingIds = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
-      if (existingIds.some(function (row) { return row[0] === String(item.id); })) {
-        throw new Error('รายการนี้ถูกเผยแพร่แล้ว');
+      const existingIndex = existingIds.findIndex(function (row) {
+        return row[0] === String(item.id);
+      });
+      if (existingIndex >= 0) {
+        const existingStatus = sheet.getRange(existingIndex + 2, 13).getDisplayValue();
+        PropertiesService.getScriptProperties().deleteProperty('MARKETPLACE_SUBMIT_ERROR_' + item.id);
+        return outputResponse({ status: 'success', id: item.id, itemStatus: existingStatus });
       }
     }
     item.image = saveMarketplaceImage(item.image, item.id);
@@ -107,9 +112,10 @@ function handleMarketplaceRequest(data) {
 
 function getPendingMarketplaceItems(adminPin) {
   verifyMarketplaceAdminPin(adminPin);
-  return readAllMarketplaceItems().filter(function (item) {
+  const items = readAllMarketplaceItems().filter(function (item) {
     return item.status === 'pending';
   });
+  return JSON.stringify(items);
 }
 
 function setMarketplaceItemStatus(id, status, adminPin) {

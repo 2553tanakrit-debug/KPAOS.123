@@ -60,11 +60,18 @@
         }, 30000);
 
         google.script.run
-          .withSuccessHandler(function (items) {
+          .withSuccessHandler(function (result) {
             if (finished || currentRequest !== requestNumber) return;
             finished = true;
             clearTimeout(timeout);
             loadButton.disabled = false;
+            let items;
+            try {
+              items = JSON.parse(result);
+            } catch (error) {
+              setMessage('ข้อมูลรายการจาก Apps Script ไม่ถูกต้อง กรุณา Deploy เวอร์ชันล่าสุด', true);
+              return;
+            }
             if (!Array.isArray(items)) {
               setMessage('ข้อมูลรายการที่ได้รับไม่ถูกต้อง', true);
               return;

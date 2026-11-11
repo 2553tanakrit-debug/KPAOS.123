@@ -2,6 +2,8 @@ const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
 const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycby6ql4x6qDwF15REqxINjb12B-a_cK2O60iUylpk3JlfMcCbildAWOhC-pOXrFJJSQ2/exec';
 let marketplaceItems = [];
+let marketplaceSubmissionInProgress = false;
+let pendingMarketplaceSubmission = null;
 
 function marketplaceApiUrl() {
   return window.KPAOS_GOOGLE_SCRIPT_URL || MARKETPLACE_API_FALLBACK;
@@ -370,40 +372,61 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('marketplace-form')?.addEventListener('submit', async event => {
     event.preventDefault();
+    if (marketplaceSubmissionInProgress) return;
+    marketplaceSubmissionInProgress = true;
+
     const form = event.currentTarget;
     const submitButton = form.querySelector('button[type="submit"]');
-    const file = document.getElementById('mp-image').files?.[0];
-    if (file && file.size > MARKETPLACE_MAX_IMAGE_BYTES) {
-      showMarketplaceToast('รูปมีขนาดใหญ่เกิน 5 MB กรุณาเลือกรูปที่เล็กลง');
-      return;
-    }
-    const apiUrl = marketplaceApiUrl();
-    if (!apiUrl) {
-      showMarketplaceToast('ยังไม่ได้ตั้งค่า Google Apps Script');
-      return;
-    }
-    const item = {
-      id: Date.now(),
-      title: document.getElementById('mp-title').value.trim(),
-      price: Number(document.getElementById('mp-price').value),
-      category: document.getElementById('mp-category').value,
-      description: document.getElementById('mp-description').value.trim(),
-      condition: document.getElementById('mp-condition').value.trim(),
-      image: '',
-      sellerName: document.getElementById('mp-seller-name').value.trim(),
-      sellerClass: document.getElementById('mp-seller-class').value.trim(),
-      fb: document.getElementById('mp-fb').value.trim(),
-      ig: document.getElementById('mp-ig').value.trim(),
-      phone: document.getElementById('mp-phone').value.trim(),
-      status: 'pending',
-      submittedAt: new Date().toISOString()
-    };
+    const originalButtonText = submitButton.textContent;
     submitButton.disabled = true;
+    submitButton.textContent = 'กำลังส่ง...';
     try {
-      item.image = file ? await readMarketplaceImage(file) : '';
+      const file = document.getElementById('mp-image').files?.[0];
+      if (file && file.size > MARKETPLACE_MAX_IMAGE_BYTES) {
+        throw new Error('รูปมีขนาดใหญ่เกิน 5 MB กรุณาเลือกรูปที่เล็กลง');
+      }
+
+      const apiUrl = marketplaceApiUrl();
+      if (!apiUrl) throw new Error('ยังไม่ได้ตั้งค่า Google Apps Script');
+
+      const item = {
+        title: document.getElementById('mp-title').value.trim(),
+        price: Number(document.getElementById('mp-price').value),
+        category: document.getElementById('mp-category').value,
+        description: document.getElementById('mp-description').value.trim(),
+        condition: document.getElementById('mp-condition').value.trim(),
+        sellerName: document.getElementById('mp-seller-name').value.trim(),
+        sellerClass: document.getElementById('mp-seller-class').value.trim(),
+        fb: document.getElementById('mp-fb').value.trim(),
+        ig: document.getElementById('mp-ig').value.trim(),
+        phone: document.getElementById('mp-phone').value.trim()
+      };
+      const fileSignature = file
+        ? [file.name, file.size, file.lastModified, file.type].join('|')
+        : '';
+      const signature = JSON.stringify({ ...item, fileSignature });
+
+      if (pendingMarketplaceSubmission?.signature === signature) {
+        item.id = pendingMarketplaceSubmission.id;
+        item.image = pendingMarketplaceSubmission.image;
+        item.submittedAt = pendingMarketplaceSubmission.submittedAt;
+      } else {
+        item.id = Date.now();
+        item.image = file ? await readMarketplaceImage(file) : '';
+        item.submittedAt = new Date().toISOString();
+        pendingMarketplaceSubmission = {
+          signature,
+          id: item.id,
+          image: item.image,
+          submittedAt: item.submittedAt
+        };
+      }
+      item.status = 'pending';
+
       await postMarketplaceSubmission(item);
       await verifyMarketplaceSubmission(item.id);
       saveMarketplaceCache([item, ...marketplaceItems.filter(entry => String(entry.id) !== String(item.id))]);
+      pendingMarketplaceSubmission = null;
       form.reset();
       document.getElementById('mp-image-preview').innerHTML = '';
       closeMarketplaceModal();
@@ -413,7 +436,9 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Marketplace submission failed:', error);
       showMarketplaceToast(`ส่งรายการออนไลน์ไม่สำเร็จ: ${error.message}`);
     } finally {
+      marketplaceSubmissionInProgress = false;
       submitButton.disabled = false;
+      submitButton.textContent = originalButtonText;
     }
   });
 
