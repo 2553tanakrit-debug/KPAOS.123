@@ -93,7 +93,7 @@ function requestMarketplaceItems() {
 
 function postMarketplaceSubmission(item) {
   const apiUrl = marketplaceApiUrl();
-  if (!apiUrl) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า Google Apps Script URL'));
+  if (!apiUrl) throw new Error('ยังไม่ได้ตั้งค่า Google Apps Script URL');
 
   const requestId = `marketplace-post-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
   const iframe = document.createElement('iframe');
@@ -116,34 +116,18 @@ function postMarketplaceSubmission(item) {
   input.value = JSON.stringify({ type: 'marketplace', action: 'submit', item });
   form.appendChild(input);
 
-  return new Promise((resolve, reject) => {
-    let submitted = false;
-    let timeout;
-    const cleanup = () => {
-      clearTimeout(timeout);
-      iframe.remove();
-      form.remove();
-    };
-    iframe.addEventListener('load', () => {
-      if (!submitted) {
-        submitted = true;
-        try {
-          form.submit();
-        } catch (error) {
-          cleanup();
-          reject(error);
-        }
-        return;
-      }
-      cleanup();
-      resolve();
-    });
-    timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('หมดเวลาส่งข้อมูลไปยัง Google Apps Script กรุณาลองใหม่เมื่อตรวจสอบสัญญาณอินเทอร์เน็ตแล้ว'));
-    }, 60000);
-    document.body.append(iframe, form);
-  });
+  const cleanup = () => {
+    iframe.remove();
+    form.remove();
+  };
+  document.body.append(iframe, form);
+  try {
+    form.submit();
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+  return cleanup;
 }
 
 function verifyMarketplaceSubmission(id) {
@@ -159,7 +143,9 @@ function verifyMarketplaceSubmission(id) {
     });
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error('หมดเวลาตรวจสอบการบันทึกออนไลน์'));
+      const error = new Error('หมดเวลาตรวจสอบการบันทึกออนไลน์');
+      error.retryable = true;
+      reject(error);
     }, 12000);
     const cleanup = () => {
       delete window[callbackName];
@@ -178,17 +164,26 @@ function verifyMarketplaceSubmission(id) {
     };
     script.onerror = () => {
       cleanup();
-      reject(new Error('ตรวจสอบรายการกับ Apps Script ไม่สำเร็จ'));
+      const error = new Error('ตรวจสอบรายการกับ Apps Script ไม่สำเร็จ');
+      error.retryable = true;
+      reject(error);
     };
     script.src = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params}`;
     document.head.appendChild(script);
   });
 
   return (async () => {
-    for (let attempt = 0; attempt < 8; attempt++) {
-      if (await checkOnce()) return;
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    let lastError;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        if (await checkOnce()) return;
+      } catch (error) {
+        if (!error.retryable) throw error;
+        lastError = error;
+      }
+      if (attempt < 9) await new Promise(resolve => setTimeout(resolve, 1200));
     }
+    if (lastError) throw lastError;
     throw new Error('Google Apps Script ยังไม่บันทึกรายการ ตรวจสอบว่าได้ Deploy โค้ดล่าสุดและอนุญาต Google Sheets/Drive แล้ว');
   })();
 }
@@ -409,8 +404,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const form = event.currentTarget;
     const submitButton = form.querySelector('button[type="submit"]');
     const originalButtonText = submitButton.textContent;
+    let cleanupSubmission;
     submitButton.disabled = true;
-    submitButton.textContent = 'กำลังส่ง...';
+    submitButton.textContent = 'กำลังส่งและตรวจสอบ...';
     try {
       const file = document.getElementById('mp-image').files?.[0];
       if (file && file.size > MARKETPLACE_MAX_SOURCE_IMAGE_BYTES) {
@@ -460,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       item.status = 'pending';
 
-      await postMarketplaceSubmission(item);
+      cleanupSubmission = await postMarketplaceSubmission(item);
       await verifyMarketplaceSubmission(item.id);
       saveMarketplaceCache([item, ...marketplaceItems.filter(entry => String(entry.id) !== String(item.id))]);
       pendingMarketplaceSubmission = null;
@@ -475,6 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Marketplace submission failed:', error);
       showMarketplaceToast(`ส่งรายการออนไลน์ไม่สำเร็จ: ${error.message}`);
     } finally {
+      cleanupSubmission?.();
       marketplaceSubmissionInProgress = false;
       submitButton.disabled = false;
       submitButton.textContent = originalButtonText;
