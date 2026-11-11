@@ -1,6 +1,6 @@
 const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
 const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbzt0sKAvY3kpwgLU84nK7GDxtmHnw53dgGQbvRYRs7ugUGVxV9lbNMk3jjNLVgSVj-V/exec';
+const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbzIRXPFKYvqsPVsSN90171P5m4D2ZfA-ujU84_n_KqU1ib4Hy_dn5P_6Y3elt_5elkG/exec';
 let marketplaceItems = [];
 
 function marketplaceApiUrl() {

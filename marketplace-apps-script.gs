@@ -167,6 +167,17 @@ function readAllMarketplaceItems() {
     });
 }
 
+function getMarketplaceImageFolder() {
+  const folders = DriveApp.getFoldersByName(MARKETPLACE_IMAGE_FOLDER_NAME);
+  return folders.hasNext() ? folders.next() : DriveApp.createFolder(MARKETPLACE_IMAGE_FOLDER_NAME);
+}
+
+function authorizeMarketplaceDrive() {
+  const folder = getMarketplaceImageFolder();
+  Logger.log('Marketplace image folder is ready: ' + folder.getUrl());
+  return folder.getUrl();
+}
+
 function saveMarketplaceImage(dataUrl, itemId) {
   if (!dataUrl) return '';
   const match = String(dataUrl).match(/^data:(image\/(?:jpeg|png|gif|webp));base64,([A-Za-z0-9+/=\r\n]+)$/i);
@@ -177,8 +188,7 @@ function saveMarketplaceImage(dataUrl, itemId) {
     throw new Error('รูปภาพมีขนาดใหญ่เกิน 5 MB');
   }
 
-  const folders = DriveApp.getFoldersByName(MARKETPLACE_IMAGE_FOLDER_NAME);
-  const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(MARKETPLACE_IMAGE_FOLDER_NAME);
+  const folder = getMarketplaceImageFolder();
   const mimeType = match[1].toLowerCase();
   const extension = mimeType.split('/')[1].replace('jpeg', 'jpg');
   const blob = Utilities.newBlob(bytes, mimeType, 'marketplace-' + itemId + '.' + extension);
