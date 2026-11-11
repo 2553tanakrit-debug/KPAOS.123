@@ -218,6 +218,33 @@ function renderMarketplace() {
     </article>`).join('');
 }
 
+function showMarketplaceLoadError(error) {
+  const grid = document.getElementById('marketplace-grid');
+  if (!grid) return;
+  console.error('Unable to load online marketplace:', error);
+  grid.innerHTML = `
+    <div class="col-span-full rounded-2xl bg-white p-6 text-center">
+      <p class="font-semibold text-amber-800">โหลดรายการออนไลน์ไม่ได้</p>
+      <p class="mt-2 text-sm text-[#86868B]">${escapeMarketplaceHTML(error.message || 'เชื่อมต่อ Google Apps Script ไม่สำเร็จ')}</p>
+      <p class="mt-2 text-sm text-[#86868B]">ตรวจว่า Deploy Apps Script เวอร์ชันล่าสุดแล้ว และตั้งการเข้าถึงเป็นทุกคน</p>
+      <button type="button" id="marketplace-retry" class="apple-btn-secondary px-4 py-2 mt-4 text-sm">ลองโหลดอีกครั้ง</button>
+    </div>`;
+  document.getElementById('marketplace-retry')?.addEventListener('click', loadMarketplaceItems);
+}
+
+function loadMarketplaceItems() {
+  const grid = document.getElementById('marketplace-grid');
+  if (grid) {
+    grid.innerHTML = '<p class="col-span-full text-center text-sm text-[#86868B]">กำลังโหลดรายการตลาด...</p>';
+  }
+  requestMarketplaceItems()
+    .then(items => {
+      saveMarketplaceCache(items);
+      renderMarketplace();
+    })
+    .catch(showMarketplaceLoadError);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   try {
     marketplaceItems = JSON.parse(localStorage.getItem(MARKETPLACE_STORE_KEY) || '[]');
@@ -306,16 +333,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  requestMarketplaceItems()
-    .then(items => {
-      saveMarketplaceCache(items);
-      renderMarketplace();
-    })
-    .catch(error => {
-      console.error('Unable to load online marketplace:', error);
-      const grid = document.getElementById('marketplace-grid');
-      if (grid && !marketplaceItems.some(item => item.status === 'approved')) {
-        grid.innerHTML = '<p class="col-span-full rounded-2xl bg-white p-6 text-center text-sm text-amber-800">โหลดรายการออนไลน์ไม่ได้ กรุณาลองใหม่ภายหลัง</p>';
-      }
-    });
+  loadMarketplaceItems();
 });
