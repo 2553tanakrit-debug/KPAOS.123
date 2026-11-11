@@ -1,6 +1,6 @@
 const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
 const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbxHKg5F9PsLUBw8wHeGQM_12tUiZqmje94e2c9dRKJYBdmmXbgsDRGvjN0VLoSg9yT4/exec';
+const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbxFAjArmMjmVH4zZBI8O9eIxJvHBWzzE0o2Fi2RHa-UIaQZadYVmBNdiFX4VApQ8PU/exec';
 let marketplaceItems = [];
 
 function marketplaceApiUrl() {
@@ -67,7 +67,7 @@ function requestMarketplaceItems() {
 
 function verifyMarketplaceSubmission(id) {
   const apiUrl = marketplaceApiUrl();
-  return new Promise((resolve, reject) => {
+  const checkOnce = () => new Promise((resolve, reject) => {
     const callbackName = `__kpaosSubmit${Date.now()}${Math.floor(Math.random() * 100000)}`;
     const script = document.createElement('script');
     const params = new URLSearchParams({
@@ -79,7 +79,7 @@ function verifyMarketplaceSubmission(id) {
     const timeout = setTimeout(() => {
       cleanup();
       reject(new Error('หมดเวลาตรวจสอบการบันทึกออนไลน์'));
-    }, 15000);
+    }, 12000);
     const cleanup = () => {
       delete window[callbackName];
       script.remove();
@@ -88,8 +88,9 @@ function verifyMarketplaceSubmission(id) {
 
     window[callbackName] = response => {
       cleanup();
-      if (response?.found) resolve();
-      else reject(new Error(response?.message || 'ยังไม่พบรายการในระบบออนไลน์'));
+      if (response?.found) resolve(true);
+      else if (response?.error) reject(new Error(response.error));
+      else resolve(false);
     };
     script.onerror = () => {
       cleanup();
@@ -98,6 +99,14 @@ function verifyMarketplaceSubmission(id) {
     script.src = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params}`;
     document.head.appendChild(script);
   });
+
+  return (async () => {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (await checkOnce()) return;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    throw new Error('Google Apps Script ยังไม่บันทึกรายการ ตรวจสอบว่าได้ Deploy โค้ดล่าสุดและอนุญาต Google Sheets/Drive แล้ว');
+  })();
 }
 
 function showMarketplaceToast(message) {

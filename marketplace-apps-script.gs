@@ -14,6 +14,12 @@ function doGet(e) {
   }
   try {
     if (e && e.parameter && e.parameter.action === 'checkSubmission') {
+      const errorKey = 'MARKETPLACE_SUBMIT_ERROR_' + e.parameter.id;
+      const storedError = PropertiesService.getScriptProperties().getProperty(errorKey);
+      if (storedError) {
+        PropertiesService.getScriptProperties().deleteProperty(errorKey);
+        return outputResponse({ status: 'error', found: false, error: storedError }, e.parameter.callback);
+      }
       const found = readAllMarketplaceItems().some(function (item) {
         return String(item.id) === String(e.parameter.id);
       });
@@ -33,8 +39,9 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  var data = null;
   try {
-    const data = JSON.parse(e.postData.contents);
+    data = JSON.parse(e.postData.contents);
     if (data.type === 'marketplace') {
       return handleMarketplaceRequest(data);
     }
@@ -54,6 +61,12 @@ function doPost(e) {
 
     return outputResponse({ status: 'success' });
   } catch (error) {
+    if (data && data.type === 'marketplace' && data.item && data.item.id) {
+      PropertiesService.getScriptProperties().setProperty(
+        'MARKETPLACE_SUBMIT_ERROR_' + data.item.id,
+        error.toString()
+      );
+    }
     return outputResponse({ status: 'error', message: error.toString() });
   }
 }
@@ -77,7 +90,12 @@ function handleMarketplaceRequest(data) {
     const values = MARKETPLACE_HEADERS.map(function (key) {
       return item[key] === undefined || item[key] === null ? '' : item[key];
     });
-    sheet.appendRow(values);
+    values[0] = String(item.id);
+    const rowNumber = sheet.getLastRow() + 1;
+    sheet.getRange(rowNumber, 1).setNumberFormat('@');
+    sheet.getRange(rowNumber, 1, 1, values.length).setValues([values]);
+    SpreadsheetApp.flush();
+    PropertiesService.getScriptProperties().deleteProperty('MARKETPLACE_SUBMIT_ERROR_' + item.id);
     return outputResponse({ status: 'success', id: item.id, itemStatus: item.status });
   }
 
