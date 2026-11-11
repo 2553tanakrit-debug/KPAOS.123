@@ -1,6 +1,6 @@
 const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
 const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbzIRXPFKYvqsPVsSN90171P5m4D2ZfA-ujU84_n_KqU1ib4Hy_dn5P_6Y3elt_5elkG/exec';
+const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbypg9XePUr4NxgN-68Jjx-AnhSRI7CU54kyQYl5oVzS20-vnHB6nhqjNom_If7peFg/exec';
 let marketplaceItems = [];
 
 function marketplaceApiUrl() {
@@ -15,6 +15,27 @@ function escapeMarketplaceHTML(value) {
     '"': '&quot;',
     "'": '&#39;'
   })[character]);
+}
+
+function marketplaceImageUrl(value) {
+  const image = String(value || '').trim();
+  if (!image) return '';
+  if (image.startsWith('data:image/')) return image;
+
+  try {
+    const url = new URL(image);
+    if (url.hostname === 'drive.google.com') {
+      const fileId = url.searchParams.get('id') ||
+        url.pathname.match(/\/file\/d\/([^/]+)/)?.[1];
+      if (fileId) {
+        return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1200`;
+      }
+    }
+  } catch (error) {
+    console.warn('Invalid marketplace image URL:', error);
+    return '';
+  }
+  return image;
 }
 
 function saveMarketplaceCache(items) {
@@ -261,7 +282,7 @@ function renderMarketplace() {
   grid.innerHTML = filtered.map(item => `
     <article class="market-card">
       <div class="market-card-img-wrap">
-        ${item.image ? `<img src="${escapeMarketplaceHTML(item.image)}" alt="${escapeMarketplaceHTML(item.title)}" loading="lazy"/>` : ''}
+        ${marketplaceImageUrl(item.image) ? `<img src="${escapeMarketplaceHTML(marketplaceImageUrl(item.image))}" alt="${escapeMarketplaceHTML(item.title)}" loading="lazy" onerror="this.closest('.market-card-img-wrap').classList.add('image-unavailable'); this.remove();"/>` : ''}
       </div>
       <div class="p-4">
         <h3 class="font-bold text-[#1D1D1F]">${escapeMarketplaceHTML(item.title)}</h3>
