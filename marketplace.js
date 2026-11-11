@@ -1,6 +1,5 @@
 // marketplace.js – ฟังก์ชัน Marketplace ของสภานักเรียน
-// ------------------------------------------------------------
-// 1. เปิด/ปิดโมดัลขายสินค้า
+
 function openMarketplaceModal() {
   document.getElementById('marketplace-modal').classList.remove('hidden');
 }
