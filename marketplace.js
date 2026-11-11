@@ -84,30 +84,6 @@ function escapeMarketplaceHTML(value) {
   })[character]);
 }
 
-function getMarketplaceProfileUrl(value, platform) {
-  const input = String(value || '').trim();
-  if (!input) return '';
-
-  const domains = {
-    facebook: ['facebook.com', 'www.facebook.com', 'm.facebook.com'],
-    instagram: ['instagram.com', 'www.instagram.com']
-  };
-  if (/^https?:\/\//i.test(input)) {
-    try {
-      const url = new URL(input);
-      return url.protocol === 'https:' && domains[platform].includes(url.hostname.toLowerCase())
-        ? url.href
-        : '';
-    } catch (error) {
-      return '';
-    }
-  }
-
-  const username = input.replace(/^@/, '');
-  if (!/^[a-zA-Z0-9._]+$/.test(username)) return '';
-  return `https://${platform === 'facebook' ? 'www.facebook.com' : 'www.instagram.com'}/${encodeURIComponent(username)}`;
-}
-
 function showMarketplaceDetails(id) {
   const items = JSON.parse(localStorage.getItem('kpaos_marketplace') || '[]');
   const item = items.find(entry => String(entry.id) === String(id));
@@ -117,12 +93,6 @@ function showMarketplaceDetails(id) {
   }
 
   const text = value => escapeMarketplaceHTML(value || 'ไม่ได้ระบุ');
-  const contactLink = (label, value, platform) => {
-    const url = getMarketplaceProfileUrl(value, platform);
-    return url
-      ? `<a href="${escapeMarketplaceHTML(url)}" target="_blank" rel="noopener noreferrer" class="text-emerald-800 underline">${label}</a>`
-      : `<span>${label}: ${text(value)}</span>`;
-  };
   const phone = String(item.phone || '').trim();
   const phoneNumber = phone.replace(/[^\d+]/g, '');
   const phoneDisplay = phone
@@ -137,8 +107,8 @@ function showMarketplaceDetails(id) {
       <p class="whitespace-pre-line"><strong>รายละเอียด:</strong> ${text(item.description)}</p>
       <div class="border-t border-black/[0.08] pt-3 space-y-2">
         <p><strong>ผู้ขาย:</strong> ${text(item.sellerName)} (${text(item.sellerClass)})</p>
-        <p>${contactLink('Facebook', item.fb, 'facebook')}</p>
-        <p>${contactLink('Instagram', item.ig, 'instagram')}</p>
+        <p><strong>Facebook:</strong> ${text(item.fb)}</p>
+        <p><strong>Instagram:</strong> ${text(item.ig)}</p>
         <p><strong>เบอร์โทร:</strong> ${phoneDisplay}</p>
       </div>
     </div>`;
@@ -183,10 +153,6 @@ function renderMarketplace() {
         <p class="text-emerald-900 font-medium">฿${i.price.toLocaleString()}</p>
         <p class="text-sm text-[#86868B]">โดย ${i.sellerName} (${i.sellerClass})</p>
         <button type="button" data-marketplace-details="${escapeMarketplaceHTML(i.id)}" class="apple-btn-secondary px-4 py-2 mt-3 text-sm">ดูรายละเอียดและติดต่อผู้ขาย</button>
-        <div class="flex gap-2 mt-2">
-          ${getMarketplaceProfileUrl(i.fb, 'facebook') ? `<a href="${escapeMarketplaceHTML(getMarketplaceProfileUrl(i.fb, 'facebook'))}" target="_blank" rel="noopener noreferrer" class="text-emerald-600" aria-label="Facebook"><i data-lucide="facebook"></i></a>` : ''}
-          ${getMarketplaceProfileUrl(i.ig, 'instagram') ? `<a href="${escapeMarketplaceHTML(getMarketplaceProfileUrl(i.ig, 'instagram'))}" target="_blank" rel="noopener noreferrer" class="text-emerald-600" aria-label="Instagram"><i data-lucide="instagram"></i></a>` : ''}
-        </div>
       </div>
     </div>`).join('');
 
@@ -212,10 +178,6 @@ function renderAdminMarketplace() {
         <p class="text-sm text-[#86868B]">โดย ${i.sellerName} (${i.sellerClass})</p>
         <p class="text-xs mt-1">${i.description}</p>
         <button type="button" data-marketplace-details="${escapeMarketplaceHTML(i.id)}" class="apple-btn-secondary px-4 py-2 mt-3 text-sm">ดูรายละเอียดและติดต่อผู้ขาย</button>
-        <div class="flex gap-2 mt-2">
-          ${getMarketplaceProfileUrl(i.fb, 'facebook') ? `<a href="${escapeMarketplaceHTML(getMarketplaceProfileUrl(i.fb, 'facebook'))}" target="_blank" rel="noopener noreferrer" class="text-emerald-600" aria-label="Facebook"><i data-lucide="facebook"></i></a>` : ''}
-          ${getMarketplaceProfileUrl(i.ig, 'instagram') ? `<a href="${escapeMarketplaceHTML(getMarketplaceProfileUrl(i.ig, 'instagram'))}" target="_blank" rel="noopener noreferrer" class="text-emerald-600" aria-label="Instagram"><i data-lucide="instagram"></i></a>` : ''}
-        </div>
         <div class="flex gap-2 mt-3">
           <button class="apple-btn-primary px-3 py-1 text-xs" onclick="updateItemStatus(${i.id}, 'approved')">Approve</button>
           <button class="apple-btn-primary bg-red-600 hover:bg-red-700 px-3 py-1 text-xs" onclick="updateItemStatus(${i.id}, 'rejected')">Reject</button>
