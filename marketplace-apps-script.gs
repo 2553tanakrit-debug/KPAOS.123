@@ -157,12 +157,11 @@ function readAllMarketplaceItems() {
   const sheet = getMarketplaceSheet();
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  return sheet.getRange(2, 1, lastRow - 1, MARKETPLACE_HEADERS.length).getValues()
+  return sheet.getRange(2, 1, lastRow - 1, MARKETPLACE_HEADERS.length).getDisplayValues()
     .map(function (row) {
       const item = {};
       MARKETPLACE_HEADERS.forEach(function (key, index) {
-        const value = row[index];
-        item[key] = value instanceof Date ? value.toISOString() : value;
+        item[key] = row[index];
       });
       return item;
     });
