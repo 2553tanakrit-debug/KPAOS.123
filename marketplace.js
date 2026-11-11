@@ -1,9 +1,10 @@
 const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
 const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbxwAfk1_0OOaL2fP-AOKEHEPDXA5JmhTf14HQYPGmAukxH7D8UCYQKF14A3Xd-vrSD_/exec';
 let marketplaceItems = [];
 
 function marketplaceApiUrl() {
-  return window.KPAOS_GOOGLE_SCRIPT_URL || '';
+  return window.KPAOS_GOOGLE_SCRIPT_URL || MARKETPLACE_API_FALLBACK;
 }
 
 function escapeMarketplaceHTML(value) {
