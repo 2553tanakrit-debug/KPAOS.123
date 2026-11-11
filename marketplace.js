@@ -1,6 +1,6 @@
 const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
 const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbxFAjArmMjmVH4zZBI8O9eIxJvHBWzzE0o2Fi2RHa-UIaQZadYVmBNdiFX4VApQ8PU/exec';
+const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbyQkTaIS0vorpo51WzbViNKYBtQktvpg3IqSXCD7QoptlRhDFI4gWZxw61akzzj_7Rs/exec';
 let marketplaceItems = [];
 
 function marketplaceApiUrl() {
@@ -90,6 +90,9 @@ function verifyMarketplaceSubmission(id) {
       cleanup();
       if (response?.found) resolve(true);
       else if (response?.error) reject(new Error(response.error));
+      else if (typeof response?.found !== 'boolean') {
+        reject(new Error('Apps Script ยังเป็นเวอร์ชันเก่า กรุณาอัปเดต Code.gs และ Deploy เป็น New version'));
+      }
       else resolve(false);
     };
     script.onerror = () => {
