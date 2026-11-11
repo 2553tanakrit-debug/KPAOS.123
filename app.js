@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
       quote: '“หา 1-1 อาวีให้หมด”',
       initials: 'ทก',
       avatarBg: 'bg-teal-900 text-teal-100',
-      bio:' อ้วนไม่ไหวสักวิชา '
+      bio: 'แชมป์เหลืองกระบี่ 2569 ไหวหมดทุกวิชา ไม่อยากโม้เท่าไหร่'
     },
     {
       id: 'wv',
