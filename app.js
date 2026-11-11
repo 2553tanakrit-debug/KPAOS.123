@@ -7,7 +7,7 @@
 // 🔗 จุดเชื่อมต่อ GOOGLE SHEETS / EXCEL SYNC
 // นำ Web App URL ที่ได้จาก Google Apps Script มาวางในเครื่องหมายคำพูดด้านล่างนี้ได้เลยครับ
 // =========================================================================
-const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxwAfk1_0OOaL2fP-AOKEHEPDXA5JmhTf14HQYPGmAukxH7D8UCYQKF14A3Xd-vrSD_/exec';
+const GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxHKg5F9PsLUBw8wHeGQM_12tUiZqmje94e2c9dRKJYBdmmXbgsDRGvjN0VLoSg9yT4/exec';
 window.KPAOS_GOOGLE_SCRIPT_URL = GOOGLE_SHEET_URL;
 
 document.addEventListener('DOMContentLoaded', () => {
