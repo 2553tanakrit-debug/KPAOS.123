@@ -126,6 +126,7 @@
       <a href="#vision" class="mobile-nav-link block text-sm font-semibold text-[#1D1D1F] py-1.5">วิสัยทัศน์ & พันธกิจ</a>
       <a href="#initiatives" class="mobile-nav-link block text-sm font-semibold text-[#1D1D1F] py-1.5">โครงการเพื่อเพื่อนนักเรียน</a>
       <a href="#board" class="mobile-nav-link block text-sm font-semibold text-[#1D1D1F] py-1.5">ทำความรู้จักคณะกรรมการสภา</a>
+      <a href="#marketplace" class="mobile-nav-link block text-sm font-semibold text-emerald-900 py-1.5">ตลาดนัดนักเรียน</a>
       <a href="#news" class="mobile-nav-link block text-sm font-semibold text-[#1D1D1F] py-1.5">ข่าวประชาสัมพันธ์</a>
       <a href="#calendar" class="mobile-nav-link block text-sm font-semibold text-[#1D1D1F] py-1.5">ปฏิทินกิจกรรมโรงเรียน</a>
       <a href="#suggestion" class="mobile-nav-link block text-sm font-semibold text-[#0D4D32] py-1.5">กล่องรับฟังเสียงนักเรียน &rarr;</a>
@@ -464,9 +465,9 @@
         <h2 class="text-3xl font-extrabold text-[#1D1D1F]">ตลาดนัดนักเรียน</h2>
         <p class="text-sm text-[#86868B]">ซื้อ-ขายของใช้ระหว่างนักเรียนอย่างปลอดภัย</p>
       </div>
-      <div class="flex gap-2 items-center">
-        <input type="text" id="market-search" placeholder="ค้นหาสินค้า..." class="px-3 py-2 rounded-xl bg-[#F5F5F7] border border-transparent focus:border-emerald-800 focus:bg-white text-sm" />
-        <select id="market-category" class="px-3 py-2 rounded-xl bg-[#F5F5F7] border border-transparent focus:border-emerald-800 focus:bg-white text-sm">
+      <div class="grid grid-cols-1 sm:flex gap-2 items-stretch sm:items-center w-full sm:w-auto">
+        <input type="text" id="market-search" placeholder="ค้นหาสินค้า..." class="w-full sm:w-auto min-w-0 px-3 py-2 rounded-xl bg-[#F5F5F7] border border-transparent focus:border-emerald-800 focus:bg-white text-sm" />
+        <select id="market-category" class="w-full sm:w-auto min-w-0 px-3 py-2 rounded-xl bg-[#F5F5F7] border border-transparent focus:border-emerald-800 focus:bg-white text-sm">
           <option value="">ทั้งหมด</option>
           <option>หนังสือ</option>
           <option>เครื่องแบบ</option>
@@ -474,7 +475,7 @@
           <option>อิเล็กทรอนิกส์</option>
           <option>อื่น ๆ</option>
         </select>
-        <select id="market-sort" class="px-3 py-2 rounded-xl bg-[#F5F5F7] border border-transparent focus:border-emerald-800 focus:bg-white text-sm">
+        <select id="market-sort" class="w-full sm:w-auto min-w-0 px-3 py-2 rounded-xl bg-[#F5F5F7] border border-transparent focus:border-emerald-800 focus:bg-white text-sm">
           <option value="dateDesc">ใหม่ที่สุด</option>
           <option value="priceAsc">ราคาต่ำ → สูง</option>
           <option value="priceDesc">ราคาสูง → ต่ำ</option>

@@ -1,77 +1,9 @@
-// marketplace.js – ฟังก์ชัน Marketplace ของสภานักเรียน
-// ------------------------------------------------------------
-// 1. เปิด/ปิดโมดัลขายสินค้า
-function openMarketplaceModal() {
-  const modal = document.getElementById('marketplace-modal');
-  modal.classList.remove('hidden');
-  modal.classList.add('open');
-}
-function closeMarketplaceModal() {
-  const modal = document.getElementById('marketplace-modal');
-  modal.classList.remove('open');
-  modal.classList.add('hidden');
-}
-// ปุ่ม floating ให้เปิดโมดัล
-document.getElementById('marketplace-fab')?.addEventListener('click', e => {
-  e.preventDefault();
-  openMarketplaceModal();
-});
-document.getElementById('marketplace-grid')?.addEventListener('click', e => {
-  const button = e.target.closest('[data-marketplace-details]');
-  if (button) showMarketplaceDetails(button.dataset.marketplaceDetails);
-});
+const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
+const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+let marketplaceItems = [];
 
-// 2. แสดงตัวอย่างภาพเมื่อเลือกไฟล์
-document.getElementById('mp-image')?.addEventListener('change', function () {
-  const preview = document.getElementById('mp-image-preview');
-  preview.innerHTML = '';
-  if (this.files && this.files[0]) {
-    const reader = new FileReader();
-    reader.onload = e => {
-      preview.innerHTML = `<img src="${e.target.result}" class="max-w-full h-auto rounded-xl"/>`;
-    };
-    reader.readAsDataURL(this.files[0]);
-  }
-});
-
-// 3. บันทึกรายการขาย (สถานะ pending)
-document.getElementById('marketplace-form')?.addEventListener('submit', e => {
-  e.preventDefault();
-
-  const item = {
-    id: Date.now(),
-    title: document.getElementById('mp-title').value.trim(),
-    price: parseFloat(document.getElementById('mp-price').value),
-    category: document.getElementById('mp-category').value,
-    description: document.getElementById('mp-description').value.trim(),
-    condition: document.getElementById('mp-condition').value.trim(),
-    image: document.querySelector('#mp-image-preview img')?.src || '',
-    sellerName: document.getElementById('mp-seller-name').value.trim(),
-    sellerClass: document.getElementById('mp-seller-class').value.trim(),
-    fb: document.getElementById('mp-fb').value.trim(),
-    ig: document.getElementById('mp-ig').value.trim(),
-    phone: document.getElementById('mp-phone').value.trim(),
-    status: 'pending', // pending / approved / rejected
-    submittedAt: new Date().toISOString()
-  };
-
-  const storeKey = 'kpaos_marketplace';
-  const existing = JSON.parse(localStorage.getItem(storeKey) || '[]');
-  existing.unshift(item);
-  localStorage.setItem(storeKey, JSON.stringify(existing));
-
-  closeMarketplaceModal();
-  showToast('ส่งรายการขายเรียบร้อยแล้ว – รอการตรวจสอบจากสภานักเรียน');
-  renderMarketplace();
-});
-
-// 4. แสดง toast แจ้งผล
-function showToast(msg) {
-  const toast = document.createElement('div');
-  toast.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 bg-emerald-900 text-white px-4 py-2 rounded-xl shadow-lg';
-  toast.textContent = msg;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
+function marketplaceApiUrl() {
+  return window.KPAOS_GOOGLE_SCRIPT_URL || '';
 }
 
 function escapeMarketplaceHTML(value) {
@@ -84,22 +16,147 @@ function escapeMarketplaceHTML(value) {
   })[character]);
 }
 
+function saveMarketplaceCache(items) {
+  marketplaceItems = items;
+  try {
+    localStorage.setItem(MARKETPLACE_STORE_KEY, JSON.stringify(items));
+  } catch (error) {
+    console.error('Unable to cache marketplace items:', error);
+  }
+}
+
+function requestMarketplaceItems() {
+  const apiUrl = marketplaceApiUrl();
+  if (!apiUrl) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า Google Apps Script URL'));
+
+  return new Promise((resolve, reject) => {
+    const callbackName = `__kpaosMarketplace${Date.now()}${Math.floor(Math.random() * 100000)}`;
+    const script = document.createElement('script');
+    const params = new URLSearchParams({
+      action: 'marketplace',
+      callback: callbackName,
+      _: String(Date.now())
+    });
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('หมดเวลารอข้อมูลตลาด'));
+    }, 15000);
+    const cleanup = () => {
+      delete window[callbackName];
+      script.remove();
+      clearTimeout(timeout);
+    };
+
+    window[callbackName] = response => {
+      cleanup();
+      if (response?.status === 'success' && Array.isArray(response.items)) {
+        resolve(response.items);
+      } else {
+        reject(new Error(response?.message || 'ข้อมูลจาก Apps Script ไม่ถูกต้อง'));
+      }
+    };
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('เชื่อมต่อ Google Apps Script ไม่สำเร็จ'));
+    };
+    script.src = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params}`;
+    document.head.appendChild(script);
+  });
+}
+
+function verifyMarketplaceSubmission(id) {
+  const apiUrl = marketplaceApiUrl();
+  return new Promise((resolve, reject) => {
+    const callbackName = `__kpaosSubmit${Date.now()}${Math.floor(Math.random() * 100000)}`;
+    const script = document.createElement('script');
+    const params = new URLSearchParams({
+      action: 'checkSubmission',
+      id: String(id),
+      callback: callbackName,
+      _: String(Date.now())
+    });
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('หมดเวลาตรวจสอบการบันทึกออนไลน์'));
+    }, 15000);
+    const cleanup = () => {
+      delete window[callbackName];
+      script.remove();
+      clearTimeout(timeout);
+    };
+
+    window[callbackName] = response => {
+      cleanup();
+      if (response?.found) resolve();
+      else reject(new Error(response?.message || 'ยังไม่พบรายการในระบบออนไลน์'));
+    };
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('ตรวจสอบรายการกับ Apps Script ไม่สำเร็จ'));
+    };
+    script.src = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params}`;
+    document.head.appendChild(script);
+  });
+}
+
+function showMarketplaceToast(message) {
+  const toast = document.createElement('div');
+  toast.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] bg-emerald-900 text-white px-4 py-2 rounded-xl shadow-lg';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+function openMarketplaceModal() {
+  const modal = document.getElementById('marketplace-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  modal.classList.add('open');
+}
+
+function closeMarketplaceModal() {
+  const modal = document.getElementById('marketplace-modal');
+  if (!modal) return;
+  modal.classList.remove('open');
+  modal.classList.add('hidden');
+}
+
+function readMarketplaceImage(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      const scale = Math.min(1, 1280 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(image.naturalWidth * scale);
+      canvas.height = Math.round(image.naturalHeight * scale);
+      const context = canvas.getContext('2d');
+      if (!context) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('เตรียมรูปภาพไม่สำเร็จ'));
+        return;
+      }
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('เปิดไฟล์รูปภาพไม่สำเร็จ'));
+    };
+    image.src = objectUrl;
+  });
+}
+
 function showMarketplaceDetails(id) {
-  const items = JSON.parse(localStorage.getItem('kpaos_marketplace') || '[]');
-  const item = items.find(entry => String(entry.id) === String(id));
+  const item = marketplaceItems.find(entry => String(entry.id) === String(id));
   if (!item) {
-    showToast('ไม่พบรายละเอียดสินค้านี้');
+    showMarketplaceToast('ไม่พบรายละเอียดสินค้า');
     return;
   }
-
   const text = value => escapeMarketplaceHTML(value || 'ไม่ได้ระบุ');
-  const phone = String(item.phone || '').trim();
-  const phoneNumber = phone.replace(/[^\d+]/g, '');
-  const phoneDisplay = phone
-    ? ( /^\+?\d{6,15}$/.test(phoneNumber)
-        ? `<a href="tel:${escapeMarketplaceHTML(phoneNumber)}" class="text-emerald-800 underline">${text(phone)}</a>`
-        : text(phone))
-    : 'ไม่ได้ระบุ';
   const details = `
     <div class="space-y-3 text-sm text-slate-700">
       <p><strong>หมวดหมู่:</strong> ${text(item.category)}</p>
@@ -109,105 +166,156 @@ function showMarketplaceDetails(id) {
         <p><strong>ผู้ขาย:</strong> ${text(item.sellerName)} (${text(item.sellerClass)})</p>
         <p><strong>Facebook:</strong> ${text(item.fb)}</p>
         <p><strong>Instagram:</strong> ${text(item.ig)}</p>
-        <p><strong>เบอร์โทร:</strong> ${phoneDisplay}</p>
+        <p><strong>เบอร์โทร:</strong> ${text(item.phone)}</p>
       </div>
     </div>`;
-
   if (window.showAppleModal) {
     window.showAppleModal('รายละเอียดสินค้า', item.title || 'สินค้า', details);
-    return;
+  } else {
+    showMarketplaceToast(`${item.title} — ${item.description}`);
   }
-  showToast('ไม่สามารถเปิดหน้ารายละเอียดได้');
 }
 
-// 5. เรนเดอร์สินค้าสาธารณะ (approved เท่านั้น)
 function renderMarketplace() {
   const grid = document.getElementById('marketplace-grid');
   if (!grid) return;
 
-  const allItems = JSON.parse(localStorage.getItem('kpaos_marketplace') || '[]');
-  const approved = allItems.filter(i => i.status === 'approved');
-
-  // ค้นหา/กรอง/เรียงลำดับตาม UI
   const query = document.getElementById('market-search')?.value.trim().toLowerCase() || '';
-  const cat   = document.getElementById('market-category')?.value || '';
-  const sort  = document.getElementById('market-sort')?.value || 'dateDesc';
-
-  let filtered = approved.filter(i => {
-    const matchesQuery = i.title.toLowerCase().includes(query) || i.description.toLowerCase().includes(query);
-    const matchesCat   = !cat || i.category === cat;
-    return matchesQuery && matchesCat;
+  const category = document.getElementById('market-category')?.value || '';
+  const sort = document.getElementById('market-sort')?.value || 'dateDesc';
+  const approved = marketplaceItems.filter(item => item.status === 'approved');
+  const filtered = approved.filter(item => {
+    const title = String(item.title || '').toLowerCase();
+    const description = String(item.description || '').toLowerCase();
+    return (title.includes(query) || description.includes(query)) &&
+      (!category || item.category === category);
   });
 
-  if (sort === 'priceAsc')   filtered.sort((a, b) => a.price - b.price);
-  else if (sort === 'priceDesc') filtered.sort((a, b) => b.price - a.price);
+  if (sort === 'priceAsc') filtered.sort((a, b) => Number(a.price) - Number(b.price));
+  else if (sort === 'priceDesc') filtered.sort((a, b) => Number(b.price) - Number(a.price));
   else filtered.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
-  grid.innerHTML = filtered.map(i => `
-    <div class="market-card">
-      <div class="market-card-img-wrap">
-        ${i.image ? `<img src="${i.image}" alt="${i.title}"/>` : ''}
-      </div>
-      <div class="p-4">
-        <h3 class="font-bold text-[#1D1D1F]">${i.title}</h3>
-        <p class="text-emerald-900 font-medium">฿${i.price.toLocaleString()}</p>
-        <p class="text-sm text-[#86868B]">โดย ${i.sellerName} (${i.sellerClass})</p>
-        <button type="button" data-marketplace-details="${escapeMarketplaceHTML(i.id)}" class="apple-btn-secondary px-4 py-2 mt-3 text-sm">ดูรายละเอียดและติดต่อผู้ขาย</button>
-      </div>
-    </div>`).join('');
-
-  if (window.lucide) window.lucide.createIcons();
-}
-
-// 6. เวอร์ชันผู้ดูแล (admin) – แสดงรายการ pending พร้อมปุ่ม Approve / Reject
-function renderAdminMarketplace() {
-  const grid = document.getElementById('marketplace-grid');
-  if (!grid) return;
-
-  const allItems = JSON.parse(localStorage.getItem('kpaos_marketplace') || '[]');
-  const pending = allItems.filter(i => i.status === 'pending');
-
-  grid.innerHTML = pending.map(i => `
-    <div class="market-card border border-emerald-200">
-      <div class="market-card-img-wrap">
-        ${i.image ? `<img src="${i.image}" alt="${i.title}"/>` : ''}
-      </div>
-      <div class="p-4">
-        <h3 class="font-bold text-[#1D1D1F]">${i.title}</h3>
-        <p class="text-emerald-900 font-medium">฿${i.price.toLocaleString()}</p>
-        <p class="text-sm text-[#86868B]">โดย ${i.sellerName} (${i.sellerClass})</p>
-        <p class="text-xs mt-1">${i.description}</p>
-        <button type="button" data-marketplace-details="${escapeMarketplaceHTML(i.id)}" class="apple-btn-secondary px-4 py-2 mt-3 text-sm">ดูรายละเอียดและติดต่อผู้ขาย</button>
-        <div class="flex gap-2 mt-3">
-          <button class="apple-btn-primary px-3 py-1 text-xs" onclick="updateItemStatus(${i.id}, 'approved')">Approve</button>
-          <button class="apple-btn-primary bg-red-600 hover:bg-red-700 px-3 py-1 text-xs" onclick="updateItemStatus(${i.id}, 'rejected')">Reject</button>
-        </div>
-        <span class="badge-pending mt-2 inline-block">Pending</span>
-      </div>
-    </div>`).join('');
-
-  if (window.lucide) window.lucide.createIcons();
-}
-
-// 7. อัปเดตสถานะสินค้า (Approve / Reject)
-function updateItemStatus(id, newStatus) {
-  const storeKey = 'kpaos_marketplace';
-  const items = JSON.parse(localStorage.getItem(storeKey) || '[]');
-  const idx = items.findIndex(i => i.id === id);
-  if (idx > -1) {
-    items[idx].status = newStatus;
-    localStorage.setItem(storeKey, JSON.stringify(items));
-    renderMarketplace();
-    if (location.hash === '#admin-marketplace') renderAdminMarketplace();
-    showToast(`รายการได้ถูก ${newStatus === 'approved' ? 'อนุมัติ' : 'ปฏิเสธ'}`);
+  if (!filtered.length) {
+    grid.innerHTML = `<p class="col-span-full rounded-2xl bg-white p-6 text-center text-sm text-[#86868B]">${
+      approved.length
+        ? 'ไม่พบสินค้าที่ตรงกับคำค้นหา'
+        : 'ยังไม่มีสินค้าที่ได้รับอนุมัติ รายการจะปรากฏที่นี่หลังสภานักเรียนอนุมัติ'
+    }</p>`;
+    return;
   }
+
+  grid.innerHTML = filtered.map(item => `
+    <article class="market-card">
+      <div class="market-card-img-wrap">
+        ${item.image ? `<img src="${escapeMarketplaceHTML(item.image)}" alt="${escapeMarketplaceHTML(item.title)}" loading="lazy"/>` : ''}
+      </div>
+      <div class="p-4">
+        <h3 class="font-bold text-[#1D1D1F]">${escapeMarketplaceHTML(item.title)}</h3>
+        <p class="text-emerald-900 font-medium">฿${Number(item.price || 0).toLocaleString()}</p>
+        <p class="text-sm text-[#86868B]">โดย ${escapeMarketplaceHTML(item.sellerName)} (${escapeMarketplaceHTML(item.sellerClass)})</p>
+        <button type="button" data-marketplace-details="${escapeMarketplaceHTML(item.id)}" class="apple-btn-secondary px-4 py-2 mt-3 text-sm">ดูรายละเอียดและติดต่อผู้ขาย</button>
+      </div>
+    </article>`).join('');
 }
 
-// 8. เริ่มต้นการแสดงผลเมื่อโหลดหน้า
 document.addEventListener('DOMContentLoaded', () => {
-  renderMarketplace();
-  // ถ้าอยู่ในหน้า admin ให้แสดง pending queue
-  if (location.hash === '#admin-marketplace') {
-    renderAdminMarketplace();
+  try {
+    marketplaceItems = JSON.parse(localStorage.getItem(MARKETPLACE_STORE_KEY) || '[]');
+  } catch (error) {
+    console.error('Unable to read marketplace cache:', error);
+    marketplaceItems = [];
   }
+  renderMarketplace();
+
+  document.getElementById('marketplace-fab')?.addEventListener('click', event => {
+    event.preventDefault();
+    openMarketplaceModal();
+  });
+  document.getElementById('marketplace-grid')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-marketplace-details]');
+    if (button) showMarketplaceDetails(button.dataset.marketplaceDetails);
+  });
+  ['market-search', 'market-category', 'market-sort'].forEach(id => {
+    document.getElementById(id)?.addEventListener(id === 'market-search' ? 'input' : 'change', renderMarketplace);
+  });
+
+  document.getElementById('mp-image')?.addEventListener('change', async function () {
+    const preview = document.getElementById('mp-image-preview');
+    preview.innerHTML = '';
+    const file = this.files && this.files[0];
+    if (!file) return;
+    try {
+      const image = await readMarketplaceImage(file);
+      preview.innerHTML = `<img src="${image}" alt="ตัวอย่างรูปสินค้า" class="max-w-full h-auto rounded-xl"/>`;
+    } catch (error) {
+      showMarketplaceToast(error.message);
+    }
+  });
+
+  document.getElementById('marketplace-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const file = document.getElementById('mp-image').files?.[0];
+    if (file && file.size > MARKETPLACE_MAX_IMAGE_BYTES) {
+      showMarketplaceToast('รูปมีขนาดใหญ่เกิน 5 MB กรุณาเลือกรูปที่เล็กลง');
+      return;
+    }
+    const apiUrl = marketplaceApiUrl();
+    if (!apiUrl) {
+      showMarketplaceToast('ยังไม่ได้ตั้งค่า Google Apps Script');
+      return;
+    }
+    const item = {
+      id: Date.now(),
+      title: document.getElementById('mp-title').value.trim(),
+      price: Number(document.getElementById('mp-price').value),
+      category: document.getElementById('mp-category').value,
+      description: document.getElementById('mp-description').value.trim(),
+      condition: document.getElementById('mp-condition').value.trim(),
+      image: '',
+      sellerName: document.getElementById('mp-seller-name').value.trim(),
+      sellerClass: document.getElementById('mp-seller-class').value.trim(),
+      fb: document.getElementById('mp-fb').value.trim(),
+      ig: document.getElementById('mp-ig').value.trim(),
+      phone: document.getElementById('mp-phone').value.trim(),
+      status: 'pending',
+      submittedAt: new Date().toISOString()
+    };
+    submitButton.disabled = true;
+    try {
+      item.image = file ? await readMarketplaceImage(file) : '';
+      await fetch(apiUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ type: 'marketplace', action: 'submit', item })
+      });
+      await verifyMarketplaceSubmission(item.id);
+      saveMarketplaceCache([item, ...marketplaceItems.filter(entry => String(entry.id) !== String(item.id))]);
+      form.reset();
+      document.getElementById('mp-image-preview').innerHTML = '';
+      closeMarketplaceModal();
+      showMarketplaceToast('ส่งรายการแล้ว รออนุมัติจากสภานักเรียน');
+      renderMarketplace();
+    } catch (error) {
+      console.error('Marketplace submission failed:', error);
+      showMarketplaceToast(`ส่งรายการออนไลน์ไม่สำเร็จ: ${error.message}`);
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  requestMarketplaceItems()
+    .then(items => {
+      saveMarketplaceCache(items);
+      renderMarketplace();
+    })
+    .catch(error => {
+      console.error('Unable to load online marketplace:', error);
+      const grid = document.getElementById('marketplace-grid');
+      if (grid && !marketplaceItems.some(item => item.status === 'approved')) {
+        grid.innerHTML = '<p class="col-span-full rounded-2xl bg-white p-6 text-center text-sm text-amber-800">โหลดรายการออนไลน์ไม่ได้ กรุณาลองใหม่ภายหลัง</p>';
+      }
+    });
 });
