@@ -41,7 +41,10 @@ function doGet(e) {
 function doPost(e) {
   var data = null;
   try {
-    data = JSON.parse(e.postData.contents);
+    const requestBody = e.parameter && e.parameter.payload
+      ? e.parameter.payload
+      : e.postData.contents;
+    data = JSON.parse(requestBody);
     if (data.type === 'marketplace') {
       return handleMarketplaceRequest(data);
     }

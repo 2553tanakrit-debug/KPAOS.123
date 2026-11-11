@@ -1,6 +1,6 @@
 const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
 const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbyQkTaIS0vorpo51WzbViNKYBtQktvpg3IqSXCD7QoptlRhDFI4gWZxw61akzzj_7Rs/exec';
+const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbzt0sKAvY3kpwgLU84nK7GDxtmHnw53dgGQbvRYRs7ugUGVxV9lbNMk3jjNLVgSVj-V/exec';
 let marketplaceItems = [];
 
 function marketplaceApiUrl() {
@@ -62,6 +62,47 @@ function requestMarketplaceItems() {
     };
     script.src = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}${params}`;
     document.head.appendChild(script);
+  });
+}
+
+function postMarketplaceSubmission(item) {
+  const apiUrl = marketplaceApiUrl();
+  if (!apiUrl) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า Google Apps Script URL'));
+
+  const requestId = `marketplace-post-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  const iframe = document.createElement('iframe');
+  iframe.name = requestId;
+  iframe.hidden = true;
+  iframe.setAttribute('aria-hidden', 'true');
+
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = apiUrl;
+  form.target = requestId;
+  form.enctype = 'application/x-www-form-urlencoded';
+  form.hidden = true;
+
+  const input = document.createElement('input');
+  input.type = 'hidden';
+  input.name = 'payload';
+  input.value = JSON.stringify({ type: 'marketplace', action: 'submit', item });
+  form.appendChild(input);
+
+  document.body.append(iframe, form);
+  try {
+    form.submit();
+  } catch (error) {
+    iframe.remove();
+    form.remove();
+    return Promise.reject(error);
+  }
+
+  return new Promise(resolve => {
+    setTimeout(() => {
+      iframe.remove();
+      form.remove();
+      resolve();
+    }, 1000);
   });
 }
 
@@ -325,12 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
     submitButton.disabled = true;
     try {
       item.image = file ? await readMarketplaceImage(file) : '';
-      await fetch(apiUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ type: 'marketplace', action: 'submit', item })
-      });
+      await postMarketplaceSubmission(item);
       await verifyMarketplaceSubmission(item.id);
       saveMarketplaceCache([item, ...marketplaceItems.filter(entry => String(entry.id) !== String(item.id))]);
       form.reset();
