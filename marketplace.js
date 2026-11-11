@@ -1,9 +1,12 @@
 const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
 const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MARKETPLACE_MAX_SOURCE_IMAGE_BYTES = 20 * 1024 * 1024;
 const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycby6ql4x6qDwF15REqxINjb12B-a_cK2O60iUylpk3JlfMcCbildAWOhC-pOXrFJJSQ2/exec';
 let marketplaceItems = [];
 let marketplaceSubmissionInProgress = false;
 let pendingMarketplaceSubmission = null;
+let marketplaceImagePreparation = null;
+let marketplaceImagePreparationFile = null;
 
 function marketplaceApiUrl() {
   return window.KPAOS_GOOGLE_SCRIPT_URL || MARKETPLACE_API_FALLBACK;
@@ -217,25 +220,41 @@ function readMarketplaceImage(file) {
     const image = new Image();
     const objectUrl = URL.createObjectURL(file);
     image.onload = () => {
-      const scale = Math.min(1, 1280 / Math.max(image.naturalWidth, image.naturalHeight));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(image.naturalWidth * scale);
-      canvas.height = Math.round(image.naturalHeight * scale);
-      const context = canvas.getContext('2d');
-      if (!context) {
+      try {
+        let scale = Math.min(1, 1280 / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('เตรียมรูปภาพไม่สำเร็จ');
+
+        let dataUrl = '';
+        for (let attempt = 0; attempt < 5; attempt++) {
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          context.fillStyle = '#fff';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const quality = Math.max(0.5, 0.8 - attempt * 0.08);
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+          const base64Length = dataUrl.length - dataUrl.indexOf(',') - 1;
+          if (base64Length * 0.75 <= MARKETPLACE_MAX_IMAGE_BYTES - 3) break;
+          scale *= 0.8;
+        }
+
         URL.revokeObjectURL(objectUrl);
-        reject(new Error('เตรียมรูปภาพไม่สำเร็จ'));
-        return;
+        const base64Length = dataUrl.length - dataUrl.indexOf(',') - 1;
+        if (base64Length * 0.75 > MARKETPLACE_MAX_IMAGE_BYTES - 3) {
+          reject(new Error('บีบอัดรูปไม่สำเร็จ กรุณาเลือกรูปที่มีขนาดเล็กลง'));
+          return;
+        }
+        resolve(dataUrl);
+      } catch (error) {
+        URL.revokeObjectURL(objectUrl);
+        reject(error);
       }
-      context.fillStyle = '#fff';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(objectUrl);
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
     };
     image.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      reject(new Error('เปิดไฟล์รูปภาพไม่สำเร็จ'));
+      reject(new Error('เปิดรูปนี้ไม่ได้ กรุณาเลือกรูป JPEG หรือ PNG จากอุปกรณ์'));
     };
     image.src = objectUrl;
   });
@@ -361,11 +380,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const preview = document.getElementById('mp-image-preview');
     preview.innerHTML = '';
     const file = this.files && this.files[0];
+    marketplaceImagePreparation = null;
+    marketplaceImagePreparationFile = file || null;
     if (!file) return;
+    if (file.size > MARKETPLACE_MAX_SOURCE_IMAGE_BYTES) {
+      this.value = '';
+      marketplaceImagePreparationFile = null;
+      showMarketplaceToast('รูปมีขนาดใหญ่เกิน 20 MB กรุณาเลือกรูปที่เล็กลง');
+      return;
+    }
     try {
-      const image = await readMarketplaceImage(file);
+      marketplaceImagePreparation = readMarketplaceImage(file);
+      const image = await marketplaceImagePreparation;
       preview.innerHTML = `<img src="${image}" alt="ตัวอย่างรูปสินค้า" class="max-w-full h-auto rounded-xl"/>`;
     } catch (error) {
+      marketplaceImagePreparation = null;
+      marketplaceImagePreparationFile = null;
+      this.value = '';
       showMarketplaceToast(error.message);
     }
   });
@@ -382,8 +413,8 @@ document.addEventListener('DOMContentLoaded', () => {
     submitButton.textContent = 'กำลังส่ง...';
     try {
       const file = document.getElementById('mp-image').files?.[0];
-      if (file && file.size > MARKETPLACE_MAX_IMAGE_BYTES) {
-        throw new Error('รูปมีขนาดใหญ่เกิน 5 MB กรุณาเลือกรูปที่เล็กลง');
+      if (file && file.size > MARKETPLACE_MAX_SOURCE_IMAGE_BYTES) {
+        throw new Error('รูปมีขนาดใหญ่เกิน 20 MB กรุณาเลือกรูปที่เล็กลง');
       }
 
       const apiUrl = marketplaceApiUrl();
@@ -412,7 +443,13 @@ document.addEventListener('DOMContentLoaded', () => {
         item.submittedAt = pendingMarketplaceSubmission.submittedAt;
       } else {
         item.id = Date.now();
-        item.image = file ? await readMarketplaceImage(file) : '';
+        if (file) {
+          item.image = file === marketplaceImagePreparationFile && marketplaceImagePreparation
+            ? await marketplaceImagePreparation
+            : await readMarketplaceImage(file);
+        } else {
+          item.image = '';
+        }
         item.submittedAt = new Date().toISOString();
         pendingMarketplaceSubmission = {
           signature,
@@ -428,6 +465,8 @@ document.addEventListener('DOMContentLoaded', () => {
       saveMarketplaceCache([item, ...marketplaceItems.filter(entry => String(entry.id) !== String(item.id))]);
       pendingMarketplaceSubmission = null;
       form.reset();
+      marketplaceImagePreparation = null;
+      marketplaceImagePreparationFile = null;
       document.getElementById('mp-image-preview').innerHTML = '';
       closeMarketplaceModal();
       showMarketplaceToast('ส่งรายการแล้ว รออนุมัติจากสภานักเรียน');
