@@ -16,6 +16,10 @@ document.getElementById('marketplace-fab')?.addEventListener('click', e => {
   e.preventDefault();
   openMarketplaceModal();
 });
+document.getElementById('marketplace-grid')?.addEventListener('click', e => {
+  const button = e.target.closest('[data-marketplace-details]');
+  if (button) showMarketplaceDetails(button.dataset.marketplaceDetails);
+});
 
 // 2. แสดงตัวอย่างภาพเมื่อเลือกไฟล์
 document.getElementById('mp-image')?.addEventListener('change', function () {
@@ -70,6 +74,82 @@ function showToast(msg) {
   setTimeout(() => toast.remove(), 3000);
 }
 
+function escapeMarketplaceHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character]);
+}
+
+function getMarketplaceProfileUrl(value, platform) {
+  const input = String(value || '').trim();
+  if (!input) return '';
+
+  const domains = {
+    facebook: ['facebook.com', 'www.facebook.com', 'm.facebook.com'],
+    instagram: ['instagram.com', 'www.instagram.com']
+  };
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      const url = new URL(input);
+      return url.protocol === 'https:' && domains[platform].includes(url.hostname.toLowerCase())
+        ? url.href
+        : '';
+    } catch (error) {
+      return '';
+    }
+  }
+
+  const username = input.replace(/^@/, '');
+  if (!/^[a-zA-Z0-9._]+$/.test(username)) return '';
+  return `https://${platform === 'facebook' ? 'www.facebook.com' : 'www.instagram.com'}/${encodeURIComponent(username)}`;
+}
+
+function showMarketplaceDetails(id) {
+  const items = JSON.parse(localStorage.getItem('kpaos_marketplace') || '[]');
+  const item = items.find(entry => String(entry.id) === String(id));
+  if (!item) {
+    showToast('ไม่พบรายละเอียดสินค้านี้');
+    return;
+  }
+
+  const text = value => escapeMarketplaceHTML(value || 'ไม่ได้ระบุ');
+  const contactLink = (label, value, platform) => {
+    const url = getMarketplaceProfileUrl(value, platform);
+    return url
+      ? `<a href="${escapeMarketplaceHTML(url)}" target="_blank" rel="noopener noreferrer" class="text-emerald-800 underline">${label}</a>`
+      : `<span>${label}: ${text(value)}</span>`;
+  };
+  const phone = String(item.phone || '').trim();
+  const phoneNumber = phone.replace(/[^\d+]/g, '');
+  const phoneDisplay = phone
+    ? ( /^\+?\d{6,15}$/.test(phoneNumber)
+        ? `<a href="tel:${escapeMarketplaceHTML(phoneNumber)}" class="text-emerald-800 underline">${text(phone)}</a>`
+        : text(phone))
+    : 'ไม่ได้ระบุ';
+  const details = `
+    <div class="space-y-3 text-sm text-slate-700">
+      <p><strong>หมวดหมู่:</strong> ${text(item.category)}</p>
+      <p><strong>สภาพสินค้า:</strong> ${text(item.condition)}</p>
+      <p class="whitespace-pre-line"><strong>รายละเอียด:</strong> ${text(item.description)}</p>
+      <div class="border-t border-black/[0.08] pt-3 space-y-2">
+        <p><strong>ผู้ขาย:</strong> ${text(item.sellerName)} (${text(item.sellerClass)})</p>
+        <p>${contactLink('Facebook', item.fb, 'facebook')}</p>
+        <p>${contactLink('Instagram', item.ig, 'instagram')}</p>
+        <p><strong>เบอร์โทร:</strong> ${phoneDisplay}</p>
+      </div>
+    </div>`;
+
+  if (window.showAppleModal) {
+    window.showAppleModal('รายละเอียดสินค้า', item.title || 'สินค้า', details);
+    return;
+  }
+  showToast('ไม่สามารถเปิดหน้ารายละเอียดได้');
+}
+
 // 5. เรนเดอร์สินค้าสาธารณะ (approved เท่านั้น)
 function renderMarketplace() {
   const grid = document.getElementById('marketplace-grid');
@@ -102,9 +182,10 @@ function renderMarketplace() {
         <h3 class="font-bold text-[#1D1D1F]">${i.title}</h3>
         <p class="text-emerald-900 font-medium">฿${i.price.toLocaleString()}</p>
         <p class="text-sm text-[#86868B]">โดย ${i.sellerName} (${i.sellerClass})</p>
+        <button type="button" data-marketplace-details="${escapeMarketplaceHTML(i.id)}" class="apple-btn-secondary px-4 py-2 mt-3 text-sm">ดูรายละเอียดและติดต่อผู้ขาย</button>
         <div class="flex gap-2 mt-2">
-          ${i.fb ? `<a href="${i.fb}" target="_blank" class="text-emerald-600"><i data-lucide="facebook"></i></a>` : ''}
-          ${i.ig ? `<a href="https://instagram.com/${i.ig}" target="_blank" class="text-emerald-600"><i data-lucide="instagram"></i></a>` : ''}
+          ${getMarketplaceProfileUrl(i.fb, 'facebook') ? `<a href="${escapeMarketplaceHTML(getMarketplaceProfileUrl(i.fb, 'facebook'))}" target="_blank" rel="noopener noreferrer" class="text-emerald-600" aria-label="Facebook"><i data-lucide="facebook"></i></a>` : ''}
+          ${getMarketplaceProfileUrl(i.ig, 'instagram') ? `<a href="${escapeMarketplaceHTML(getMarketplaceProfileUrl(i.ig, 'instagram'))}" target="_blank" rel="noopener noreferrer" class="text-emerald-600" aria-label="Instagram"><i data-lucide="instagram"></i></a>` : ''}
         </div>
       </div>
     </div>`).join('');
@@ -130,9 +211,10 @@ function renderAdminMarketplace() {
         <p class="text-emerald-900 font-medium">฿${i.price.toLocaleString()}</p>
         <p class="text-sm text-[#86868B]">โดย ${i.sellerName} (${i.sellerClass})</p>
         <p class="text-xs mt-1">${i.description}</p>
+        <button type="button" data-marketplace-details="${escapeMarketplaceHTML(i.id)}" class="apple-btn-secondary px-4 py-2 mt-3 text-sm">ดูรายละเอียดและติดต่อผู้ขาย</button>
         <div class="flex gap-2 mt-2">
-          ${i.fb ? `<a href="${i.fb}" target="_blank" class="text-emerald-600"><i data-lucide="facebook"></i></a>` : ''}
-          ${i.ig ? `<a href="https://instagram.com/${i.ig}" target="_blank" class="text-emerald-600"><i data-lucide="instagram"></i></a>` : ''}
+          ${getMarketplaceProfileUrl(i.fb, 'facebook') ? `<a href="${escapeMarketplaceHTML(getMarketplaceProfileUrl(i.fb, 'facebook'))}" target="_blank" rel="noopener noreferrer" class="text-emerald-600" aria-label="Facebook"><i data-lucide="facebook"></i></a>` : ''}
+          ${getMarketplaceProfileUrl(i.ig, 'instagram') ? `<a href="${escapeMarketplaceHTML(getMarketplaceProfileUrl(i.ig, 'instagram'))}" target="_blank" rel="noopener noreferrer" class="text-emerald-600" aria-label="Instagram"><i data-lucide="instagram"></i></a>` : ''}
         </div>
         <div class="flex gap-2 mt-3">
           <button class="apple-btn-primary px-3 py-1 text-xs" onclick="updateItemStatus(${i.id}, 'approved')">Approve</button>
@@ -167,4 +249,3 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAdminMarketplace();
   }
 });
-
