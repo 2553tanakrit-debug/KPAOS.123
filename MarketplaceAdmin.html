@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body { margin: 0; padding: 20px; font: 16px Arial, sans-serif; color: #1d1d1f; background: #f5f5f7; }
+      main { max-width: 760px; margin: auto; }
+      form, .card { padding: 18px; margin: 14px 0; border: 1px solid #ddd; border-radius: 16px; background: white; }
+      input, button { box-sizing: border-box; padding: 10px 12px; border-radius: 10px; font-size: 16px; }
+      input { width: 100%; margin: 8px 0; border: 1px solid #bbb; }
+      button { margin: 8px 8px 0 0; border: 0; color: white; background: #0d4d32; cursor: pointer; }
+      button.reject { background: #b42318; }
+      button:disabled { opacity: .6; cursor: wait; }
+      img { display: block; max-width: 100%; max-height: 360px; object-fit: contain; margin: 12px 0; }
+      .error { color: #b42318; }
+      .muted { color: #666; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>อนุมัติรายการตลาดนัด</h1>
+      <form id="login-form">
+        <label for="pin">รหัสอนุมัติ</label>
+        <input id="pin" type="password" autocomplete="current-password" required>
+        <button id="load-button" type="submit">ดูรายการที่รออนุมัติ</button>
+        <p id="message" role="status"></p>
+      </form>
+      <section id="items" aria-live="polite"></section>
+    </main>
+    <script>
+      let adminPin = '';
+      let requestNumber = 0;
+      const message = document.getElementById('message');
+      const itemsContainer = document.getElementById('items');
+      const loadButton = document.getElementById('load-button');
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
+          return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char];
+        });
+      }
+
+      function setMessage(text, isError) {
+        message.textContent = text;
+        message.className = isError ? 'error' : 'muted';
+      }
+
+      function loadItems() {
+        const currentRequest = ++requestNumber;
+        let finished = false;
+        loadButton.disabled = true;
+        setMessage('กำลังโหลดรายการ...', false);
+
+        const timeout = setTimeout(function () {
+          if (finished || currentRequest !== requestNumber) return;
+          finished = true;
+          loadButton.disabled = false;
+          setMessage('โหลดนานเกินไป กรุณาตรวจหน้า Executions ใน Apps Script แล้วลองใหม่', true);
+        }, 30000);
+
+        google.script.run
+          .withSuccessHandler(function (items) {
+            if (finished || currentRequest !== requestNumber) return;
+            finished = true;
+            clearTimeout(timeout);
+            loadButton.disabled = false;
+            if (!Array.isArray(items)) {
+              setMessage('ข้อมูลรายการที่ได้รับไม่ถูกต้อง', true);
+              return;
+            }
+            itemsContainer.innerHTML = '';
+            setMessage(items.length ? 'รายการรออนุมัติ: ' + items.length : 'ไม่มีรายการรออนุมัติ', false);
+            items.forEach(function (item) {
+              const card = document.createElement('article');
+              card.className = 'card';
+              card.innerHTML =
+                (item.image ? '<img src="' + escapeHtml(item.image) + '" alt="รูปสินค้า">' : '') +
+                '<h2>' + escapeHtml(item.title) + '</h2>' +
+                '<p><b>ราคา:</b> ฿' + escapeHtml(item.price) + ' · <b>หมวดหมู่:</b> ' + escapeHtml(item.category) + '</p>' +
+                '<p><b>สภาพ:</b> ' + escapeHtml(item.condition) + '</p>' +
+                '<p>' + escapeHtml(item.description) + '</p>' +
+                '<p><b>ผู้ขาย:</b> ' + escapeHtml(item.sellerName) + ' (' + escapeHtml(item.sellerClass) + ')</p>' +
+                '<p><b>Facebook:</b> ' + escapeHtml(item.fb || 'ไม่ได้ระบุ') + '</p>' +
+                '<p><b>Instagram:</b> ' + escapeHtml(item.ig || 'ไม่ได้ระบุ') + '</p>' +
+                '<p><b>โทร:</b> ' + escapeHtml(item.phone || 'ไม่ได้ระบุ') + '</p>';
+              ['approved', 'rejected'].forEach(function (status) {
+                const button = document.createElement('button');
+                button.textContent = status === 'approved' ? 'อนุมัติ' : 'ปฏิเสธ';
+                if (status === 'rejected') button.className = 'reject';
+                button.addEventListener('click', function () {
+                  button.disabled = true;
+                  google.script.run
+                    .withSuccessHandler(loadItems)
+                    .withFailureHandler(function (error) {
+                      button.disabled = false;
+                      setMessage(error.message || 'เปลี่ยนสถานะไม่สำเร็จ', true);
+                    })
+                    .setMarketplaceItemStatus(item.id, status, adminPin);
+                });
+                card.appendChild(button);
+              });
+              itemsContainer.appendChild(card);
+            });
+          })
+          .withFailureHandler(function (error) {
+            if (finished || currentRequest !== requestNumber) return;
+            finished = true;
+            clearTimeout(timeout);
+            loadButton.disabled = false;
+            itemsContainer.innerHTML = '';
+            setMessage(error.message || 'โหลดรายการไม่สำเร็จ', true);
+          })
+          .getPendingMarketplaceItems(adminPin);
+      }
+
+      document.getElementById('login-form').addEventListener('submit', function (event) {
+        event.preventDefault();
+        adminPin = document.getElementById('pin').value;
+        loadItems();
+      });
+    </script>
+  </body>
+</html>

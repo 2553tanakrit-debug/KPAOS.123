@@ -1,6 +1,6 @@
 const MARKETPLACE_STORE_KEY = 'kpaos_marketplace';
 const MARKETPLACE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbypg9XePUr4NxgN-68Jjx-AnhSRI7CU54kyQYl5oVzS20-vnHB6nhqjNom_If7peFg/exec';
+const MARKETPLACE_API_FALLBACK = 'https://script.google.com/macros/s/AKfycbxB5fusTgk5Mui2BXD-g3F3pYReFUeC-DT_yeBcjRUWwRri3-G1DFa4vrwvNQUsr8c8/exec';
 let marketplaceItems = [];
 
 function marketplaceApiUrl() {
@@ -93,14 +93,16 @@ function postMarketplaceSubmission(item) {
   const requestId = `marketplace-post-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
   const iframe = document.createElement('iframe');
   iframe.name = requestId;
-  iframe.hidden = true;
+  iframe.tabIndex = -1;
   iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;width:1px;height:1px;left:-10000px;top:0;border:0;';
 
   const form = document.createElement('form');
   form.method = 'POST';
   form.action = apiUrl;
   form.target = requestId;
   form.enctype = 'application/x-www-form-urlencoded';
+  form.acceptCharset = 'UTF-8';
   form.hidden = true;
 
   const input = document.createElement('input');
@@ -109,21 +111,33 @@ function postMarketplaceSubmission(item) {
   input.value = JSON.stringify({ type: 'marketplace', action: 'submit', item });
   form.appendChild(input);
 
-  document.body.append(iframe, form);
-  try {
-    form.submit();
-  } catch (error) {
-    iframe.remove();
-    form.remove();
-    return Promise.reject(error);
-  }
-
-  return new Promise(resolve => {
-    setTimeout(() => {
+  return new Promise((resolve, reject) => {
+    let submitted = false;
+    let timeout;
+    const cleanup = () => {
+      clearTimeout(timeout);
       iframe.remove();
       form.remove();
+    };
+    iframe.addEventListener('load', () => {
+      if (!submitted) {
+        submitted = true;
+        try {
+          form.submit();
+        } catch (error) {
+          cleanup();
+          reject(error);
+        }
+        return;
+      }
+      cleanup();
       resolve();
-    }, 1000);
+    });
+    timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('หมดเวลาส่งข้อมูลไปยัง Google Apps Script กรุณาลองใหม่เมื่อตรวจสอบสัญญาณอินเทอร์เน็ตแล้ว'));
+    }, 60000);
+    document.body.append(iframe, form);
   });
 }
 

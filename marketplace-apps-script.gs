@@ -161,7 +161,8 @@ function readAllMarketplaceItems() {
     .map(function (row) {
       const item = {};
       MARKETPLACE_HEADERS.forEach(function (key, index) {
-        item[key] = row[index];
+        const value = row[index];
+        item[key] = value instanceof Date ? value.toISOString() : value;
       });
       return item;
     });
