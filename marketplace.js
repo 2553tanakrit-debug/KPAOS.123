@@ -1,12 +1,15 @@
 // marketplace.js – ฟังก์ชัน Marketplace ของสภานักเรียน
 
 function openMarketplaceModal() {
-  document.getElementById('marketplace-modal').classList.remove('hidden');
+const modal = document.getElementById('marketplace-modal');
+  modal.classList.remove('hidden');
+  modal.classList.add('open');
 }
 function closeMarketplaceModal() {
-  document.getElementById('marketplace-modal').classList.add('hidden');
+  const modal = document.getElementById('marketplace-modal');
+  modal.classList.remove('open');
+  modal.classList.add('hidden');
 }
-// ปุ่ม floating ให้เปิดโมดัล
 document.getElementById('marketplace-fab')?.addEventListener('click', e => {
   e.preventDefault();
   openMarketplaceModal();
